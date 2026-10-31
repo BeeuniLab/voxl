@@ -186,7 +186,7 @@ fn flow_ok(hub: &Hub, interval_ms: f64) -> bool {
         // Enough frames in flight to cover one RTT plus decode, but never more than ~rtt+120ms of queue.
         let max_n = (((rtt + 40.0) / interval_ms).ceil() as usize + 2).clamp(3, 40);
         let max_age = rtt as u128 + 120;
-        if age > 4000 {
+        if age > 1000 {
             // Stalled client (hidden tab, dead socket): stop letting it gate everyone.
             log::warn!(
                 "client {} stalled ({} frames, {} ms); resyncing",

@@ -1,0 +1,14 @@
+FROM ubuntu:24.04 AS build
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl build-essential pkg-config clang libclang-dev \
+    libx264-dev libyuv-dev libopus-dev libpulse-dev libxcb1-dev npm \
+    && npm install -g esbuild@0.25.11 \
+    && curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal \
+    && printf 'libdir=/usr/lib/%s-linux-gnu\nName: libyuv\nDescription: libyuv\nVersion: 0\nLibs: -L${libdir} -lyuv\nCflags: -I/usr/include\n' "$(uname -m)" > /usr/share/pkgconfig/libyuv.pc
+WORKDIR /src
+COPY . .
+RUN /root/.cargo/bin/cargo test --locked && /root/.cargo/bin/cargo build --release --locked \
+    && strip target/release/voxl
+FROM scratch AS release
+COPY --from=build /src/target/release/voxl /voxl
