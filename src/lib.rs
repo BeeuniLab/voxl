@@ -338,7 +338,7 @@ async fn serve(a: HashMap<String, String>) {
         // --title: the browser tab's title.
         index: server::index_html(
             a.get("title")
-                .map_or("Voxl Computer Stream", |t| t.as_str()),
+                .map_or("Beeuni Computer", |t| t.as_str()),
         ),
     };
     let app = server::router(state);
