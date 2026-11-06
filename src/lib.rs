@@ -4,6 +4,7 @@
 //! The `voxl` binary calls [`run`] with its command line; other programs (the Tembo CLI's
 //! `tembo voxl`) embed the server the same way.
 
+mod access;
 #[cfg(target_os = "linux")]
 mod audio;
 #[cfg(target_os = "linux")]
@@ -15,9 +16,11 @@ mod corners;
 mod desktop;
 mod encoder;
 mod files;
+mod help;
 mod hub;
 #[cfg(target_os = "linux")]
 mod input;
+mod login;
 #[cfg(target_os = "macos")]
 mod mac;
 mod mic;
@@ -77,6 +80,11 @@ fn truthy(v: Option<&String>, default: bool) -> bool {
 /// Runs the server with these command-line flags (without the program name) until it's
 /// told to stop. Takes over the calling thread, which on macOS has to be the main thread.
 pub fn run(args: impl IntoIterator<Item = String>) {
+    let args: Vec<String> = args.into_iter().collect();
+    // --help and --version print and return instead of starting the server.
+    if help::print_if_asked(&args) {
+        return;
+    }
     let a = parse_args(args);
     let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
         .try_init();
@@ -322,6 +330,12 @@ async fn serve(a: HashMap<String, String>) {
             );
         }
     }
+    // --favicon: the tab's icon (default: voxl's own).
+    let (favicon, favicon_type) = server::favicon(a.get("favicon").map(|s| s.as_str()))
+        .unwrap_or_else(|e| {
+            log::error!("{e}");
+            std::process::exit(1);
+        });
     let state = server::AppState {
         hub: hub.clone(),
         audio: audio_on,
@@ -340,12 +354,49 @@ async fn serve(a: HashMap<String, String>) {
             a.get("title")
                 .map_or("Beeuni Computer", |t| t.as_str()),
         ),
+        favicon,
+        favicon_type,
     };
-    let app = server::router(state);
+    // --allowed-hosts and --allowed-origins: the host names and other sites voxl answers
+    // besides IP addresses, localhost and its own page (see access.rs).
+    let access = std::sync::Arc::new(access::Access::new(
+        a.get("allowed-hosts").map(|s| s.as_str()),
+        a.get("allowed-origins").map(|s| s.as_str()),
+    ));
+    // The login (see login.rs): a password, given or made up at startup, unless
+    // --enable-basic-auth=false.
+    let login =
+        login::Login::from_args(&a).map(|(l, generated)| (std::sync::Arc::new(l), generated));
+    let mut app = server::router(state);
+    if let Some((l, _)) = &login {
+        app = app.layer(axum::middleware::from_fn_with_state(
+            l.clone(),
+            login::check,
+        ));
+    }
+    // Added last, so it runs first: a request for the wrong host or from another site's
+    // page is turned away before the login is asked for.
+    let app = app.layer(axum::middleware::from_fn_with_state(access, access::check));
     let listener = tokio::net::TcpListener::bind((addr.as_str(), port))
         .await
         .expect("bind");
     log::info!("listening on http://{addr}:{port}");
+    // Where to point a browser on this machine.
+    let page = match addr.as_str() {
+        "0.0.0.0" | "::" => format!("http://localhost:{port}/"),
+        a if a.contains(':') => format!("http://[{a}]:{port}/"),
+        a => format!("http://{a}:{port}/"),
+    };
+    match &login {
+        Some((l, true)) => log::info!(
+            "open {page}?token={} to sign in (the password is {0}; choose one with --basic-auth-password or VOXL_PASSWORD)",
+            l.password()
+        ),
+        Some((_, false)) => log::info!(
+            "login on: sign in at {page} with the password, or open {page}?token=<password>"
+        ),
+        None => log::info!("login off (--enable-basic-auth=false): anyone who reaches {page} can use this desktop"),
+    }
     use axum::serve::ListenerExt;
     let listener = listener.tap_io(|tcp| {
         let _ = tcp.set_nodelay(true);

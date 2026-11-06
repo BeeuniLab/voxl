@@ -1,11 +1,11 @@
 [package]
 # `voxl` on crates.io belongs to an unrelated crate; the binary is still `voxl`.
 name = "voxl-server"
-version = "0.2.0"
+version = "0.3.3-beeuni.1"
 edition = "2021"
 license = "MIT"
-description = "Low-latency desktop streaming for the browser: an X11 display or a Mac's screen as H.264 over a WebSocket"
-repository = "https://github.com/tembo/voxl"
+description = "Low-latency desktop streaming for the browser: an X11 display, a Mac's screen or a Windows desktop as H.264 over a WebSocket"
+repository = "https://github.com/BeeuniLab/voxl"
 readme = "README.md"
 # Lets programs that embed voxl read DEP_VOXL_RPATH (see build.rs).
 links = "voxl"
@@ -54,6 +54,8 @@ futures-util = { version = "0.3", default-features = false, features = [
 	"sink",
 ] }
 png = "0.18"
+base64 = "0.22"
+getrandom = "0.3"
 zip = { version = "7", default-features = false, features = [
 	"deflate-flate2-zlib-rs",
 ] }
@@ -110,7 +112,7 @@ windows = { version = "0.61", features = [
 windows-core = "0.61"
 
 [build-dependencies]
-bindgen = "0.71"
+bindgen = "0.72"
 pkg-config = "0.3"
 vcpkg = "0.2"
 
